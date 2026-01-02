@@ -1,47 +1,9 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { ref } from 'vue'
 
 const subscription = ref(null)
-const title = ref('Web Push Demo')
 const body = ref('')
-
-const supported = computed(
-  () => typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window
-)
-const publicKey = computed(() => import.meta.env.VITE_VAPID_PUBLIC_KEY || '')
-
-const saveSubscription = (value) => {
-  if (!value) {
-    localStorage.removeItem('web-push-subscription')
-    return
-  }
-  localStorage.setItem('web-push-subscription', JSON.stringify(value))
-}
-
-const loadSubscription = () => {
-  const saved = localStorage.getItem('web-push-subscription')
-  if (!saved) return null
-  try {
-    return JSON.parse(saved)
-  } catch {
-    localStorage.removeItem('web-push-subscription')
-    return null
-  }
-}
-
-const registerServiceWorker = async () => {
-  if (!supported.value) return null
-  try {
-    return await navigator.serviceWorker.register('/sw.js')
-  } catch {
-    return null
-  }
-}
-
-const requestPermission = async () => {
-  if (!supported.value) return 'denied'
-  return Notification.requestPermission()
-}
+const publicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY || ''
 
 const urlBase64ToUint8Array = (base64String) => {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
@@ -55,24 +17,25 @@ const urlBase64ToUint8Array = (base64String) => {
 }
 
 const subscribe = async () => {
-  if (!supported.value) return
-  if (!publicKey.value) return
-  const registration = (await navigator.serviceWorker.ready) || (await registerServiceWorker())
-  if (!registration) return
-  const existing = await registration.pushManager.getSubscription()
-  if (existing) {
-    subscription.value = existing
-    saveSubscription(existing)
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    window.alert('瀏覽器不支援')
     return
   }
-  const permission = await requestPermission()
-  if (permission !== 'granted') return
-  const newSubscription = await registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(publicKey.value),
-  })
-  subscription.value = newSubscription
-  saveSubscription(newSubscription)
+  if (!publicKey) {
+    window.alert('缺少 VAPID 公鑰')
+    return
+  }
+  const registration = await navigator.serviceWorker.register('/sw.js')
+  let existing = await registration.pushManager.getSubscription()
+  if (!existing) {
+    const permission = await Notification.requestPermission()
+    if (permission !== 'granted') return
+    existing = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
+    })
+  }
+  subscription.value = existing
 }
 
 const sendTest = async () => {
@@ -81,7 +44,7 @@ const sendTest = async () => {
     return
   }
   const payload = {
-    title: title.value || 'Web Push Demo',
+    title: 'Web Push Demo',
     body: body.value || '',
     url: window.location.origin,
   }
@@ -95,14 +58,6 @@ const sendTest = async () => {
   })
 }
 
-onMounted(async () => {
-  if (!supported.value) return
-  await registerServiceWorker()
-  const saved = loadSubscription()
-  if (saved) {
-    subscription.value = saved
-  }
-})
 </script>
 
 <template>
