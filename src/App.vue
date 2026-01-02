@@ -25,20 +25,32 @@ const subscribe = async () => {
     window.alert('缺少 VAPID 公鑰')
     return
   }
-  const registration = await navigator.serviceWorker.register('/sw.js')
-  let existing = await registration.pushManager.getSubscription()
-  if (!existing) {
-    const permission = await Notification.requestPermission()
-    if (permission !== 'granted') return
-    existing = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(publicKey),
-    })
+  try {
+    const registration = await navigator.serviceWorker.register('/sw.js')
+    let existing = await registration.pushManager.getSubscription()
+    if (!existing) {
+      const permission = await Notification.requestPermission()
+      if (permission !== 'granted') {
+        window.alert('未允許通知')
+        return
+      }
+      existing = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      })
+    }
+    subscription.value = existing
+    window.alert('訂閱成功')
+  } catch (error) {
+    window.alert(`訂閱失敗: ${error?.message || '未知錯誤'}`)
   }
-  subscription.value = existing
 }
 
 const sendTest = async () => {
+  if (!subscription.value && 'serviceWorker' in navigator) {
+    const registration = await navigator.serviceWorker.ready
+    subscription.value = await registration.pushManager.getSubscription()
+  }
   if (!subscription.value) {
     window.alert('請先訂閱')
     return
